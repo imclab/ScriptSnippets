@@ -19,6 +19,7 @@ JAVA_HOME=/usr/java/jdk1.7.0_05
 #############################################################################
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
+# work out the version from the directory structure
 if [[ ${DIR} =~ ".*/(.*)/bin$" ]]
 then
         VERSION=${BASH_REMATCH[1]}
@@ -27,6 +28,23 @@ else
         echo "Exiting..."
         exit 1
 fi
+
+# set variables depending on the environment
+case `echo ${ENVIRONMENT} | tr '[:upper:]' '[:lower:]'` in
+prod*)
+	ENVIRONMENT="Production"
+	;;
+qa*)
+	ENVIRONMENT="Qa"
+	;;
+dev*)
+	ENVIRONMENT="Development"
+	;;
+*)
+	echo "Unknown environment ${ENVIRONMENT} [possible values: dev,qa,prod]"
+	echo "Exiting..."
+	exit 1;
+esac
 
 CONFIG_HOME="/usr/${APPNAME}/${VERSION}/config"
 LIB_HOME="/usr/${APPNAME}/${VERSION}/lib"
