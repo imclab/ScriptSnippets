@@ -1,0 +1,131 @@
+<project name="package" default="package">
+	<property environment="env" />
+	<property name="system" value="NA" />
+
+	<target name="setup" description="setup variables">
+		<exec executable="bash" outputproperty="path.region">
+			<arg value="-c"/>
+			<arg line="&quot;echo ${user.dir} | awk -F'/' '{print $(NF-1)}' | sed 's/..$//'&quot;" />
+		</exec>
+		<exec executable="bash" outputproperty="path.version">
+			<arg value="-c"/>
+			<arg line="&quot;echo ${user.dir} | awk -F'/' '{print $(NF)}'&quot;" />
+		</exec>
+
+		<condition property="region" value="${env.REGION}" else="${path.region}">
+			<isset property="env.REGION" />
+		</condition>
+		<condition property="package" value="${env.PACKAGE}" else="Default">
+			<isset property="env.PACKAGE" />
+		</condition>
+		<condition property="version" value="${env.VERSION}" else="${path.version}">
+			<isset property="env.VERSION" />
+		</condition>
+
+		<echo>Package values:</echo>
+		<echo>  Region=${region}</echo>
+		<echo> Package=${package}</echo>
+		<echo> Version=${version}</echo>
+
+		<property name="dir.tar" location="tar" />
+		<property name="dir.package" location="package" />
+		<property name="dir.classes" location="${dir.package}/classes" />
+		<property name="dir.spec" location="${dir.package}/SPEC" />
+		<property name="dir.rpms" location="${dir.package}/RPMS" />
+		<property name="dir.build" location="${dir.package}/BUILD" />
+		<property name="dir.install" location="${dir.build}/opt/aee/${package}/${version}" />
+		<property name="dir.install.bin" location="${dir.install}/bin"/>
+		<property name="dir.install.lib" location="${dir.install}/lib"/>
+	</target>
+
+	<target name="clean" depends="setup" description="clean up">
+		<delete dir="${dir.package}"/>
+		<delete dir="${dir.tar}"/>
+		<delete verbose="true">
+			<fileset dir=".">
+				<include name="*.tar"/>
+				<include name="*.rpm"/>
+			</fileset>
+		</delete>
+	</target>
+
+	<target name="compile" depends="dist" description="compile java files">
+		<echo>Building java files</echo>
+		<javac srcdir="src/main/java" destdir="${dir.classes}" debug="on" debuglevel="lines,vars,source" includeantruntime="false">
+			<classpath refid="compile.classpath"/>
+		</javac>
+		<jar jarfile="${dir.install.lib}/GenerateSchema.jar" basedir="${dir.classes}"/>
+	</target>
+
+	<path id="compile.classpath">
+		<fileset dir="etc/lib/dist/">
+			<include name="*.jar" />
+		</fileset>
+	</path>
+
+	<target name="dist" depends="setup" description="creates directories for package generation">
+		<mkdir dir="${dir.package}"/>
+		<mkdir dir="${dir.classes}"/>
+		<mkdir dir="${dir.spec}"/>
+		<mkdir dir="${dir.rpms}"/>
+		<mkdir dir="${dir.install}"/>
+		<mkdir dir="${dir.install.bin}"/>
+		<mkdir dir="${dir.install.lib}"/>
+	</target>
+
+	<target name="install" depends="compile" description="prepare installation directories">
+		<copy todir="${dir.install.bin}" overwrite="true">
+			<fileset dir="src/main/scripts" includes="**/*" />
+		</copy>
+	</target>
+
+	<target name="package" depends="setup,clean,install" description="builds RPM">
+		<echo>Searching environment varaibles to finds macro files to be used by builder</echo>
+		<exec executable="bash" outputproperty="xenv.sgsbase">
+			<arg value="-c"/>
+			<arg line="&quot;echo ${env.SGSBASE} | sed -e 's:\/:\\\/:g'&quot;" />
+		</exec>
+		<exec executable="bash" outputproperty="xenv.rpmmac">
+			<arg value="-c"/>
+			<arg line="&quot;rpm --showrc | grep macrofiles | sed -e 's/^macrofiles[ \t]*: //'|sed -e 's/:~\/.rpmmacros//' | sed -e 's/:/:${xenv.sgsbase}/g' | sed -e 's/^\/usr/${xenv.sgsbase}\/usr/'&quot;" />
+		</exec>
+		<echo>xenv.sgsbase=${xenv.sgsbase}</echo>
+		<echo>xenv.rpmmac=${xenv.rpmmac}</echo>
+
+		<echo>Creating rpmrc file that contains paths to macrofiles</echo>
+		<echo file="${dir.spec}/rpmrc">macrofiles:${xenv.rpmmac}:${dir.spec}/rpmmacros</echo>
+
+		<echo>Creating macro file that contains varaibles</echo>
+		<echo file="${dir.spec}/rpmmacros">%_topdir  ${dir.package}${line.separator}</echo>
+		<echo file="${dir.spec}/rpmmacros" append="true">%_tmppath ${dir.package}/tmp${line.separator}</echo>
+		<echo file="${dir.spec}/rpmmacros" append="true">%packagename ${package}${line.separator}</echo>
+		<echo file="${dir.spec}/rpmmacros" append="true">%packageversion ${version}${line.separator}</echo>
+		<echo file="${dir.spec}/rpmmacros" append="true">%system ${system}${line.separator}</echo>
+		<echo file="${dir.spec}/rpmmacros" append="true">%region ${region}${line.separator}</echo>
+
+		<echo>Calling rpmbuild</echo>
+		<echo>Package=${package}</echo>
+		<echo>Version=${version}</echo>
+		<exec executable="rpmbuild" failonerror="true">
+			<arg line="--buildroot=${dir.build} --rcfile=/usr/lib/rpm/rpmrc:${dir.spec}/rpmrc -bb -vv ${dir.spec}/package.spec" />
+		</exec>
+		<echo>Moving RPM to base directory</echo>
+		<move todir="." overwrite="true" verbose="true">
+			<fileset dir="${dir.rpms}/x86_64">
+				<include name="*.rpm" />
+			</fileset>
+		</move>
+	</target>
+
+	<target name="tar" depends="setup,clean" description="creates tar file">
+		<echo>Creating tar directory and copying files to be tared</echo>
+		<mkdir dir="${dir.tar}"/>
+		<copy todir="${dir.tar}" overwrite="true">
+			<fileset dir=".">
+				<include name="build.xml"/>
+				<include name="src/**"/>
+			</fileset>
+		</copy>
+		<tar destfile="${package}_${version}.tar" basedir="${dir.tar}" />
+	</target>
+</project>

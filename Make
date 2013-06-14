@@ -1,0 +1,7 @@
+BASE=$(shell dirname `pwd`)   [current directory]
+RPMRC=/usr/lib/rpm/rpmrc
+TEMPINSTALL=tmp_install
+ 
+BASE=/opt/USPackage/1.2.0
+APP=$(echo $BASE | awk -F'/' '{print $(NF-1)}' | sed 's/^..//')
+VERSION=$(echo $BASE | awk -F'/' '{print $(NF)}')
